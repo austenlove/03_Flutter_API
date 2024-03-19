@@ -1,21 +1,33 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-void main() {
-  runApp(MultiProvider(
+// SharedPreferences 전역변수 선언 : 초기 설정값 저장
+late SharedPreferences prefs;
+
+void main() async {
+  // main()에서 async 사용
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Shared Preference 인스턴스 생성
+  prefs = await SharedPreferences.getInstance();
+  
+  // favoriteCatImages 가져오기
+  List<String> favoriteCatImages = prefs.getStringList('favoriteCatImages') ?? [];
+
+  runApp(
+    MultiProvider(
       providers: [
-        ChangeNotifierProvider(
-            create: (context) => CatService()
-        ),
+        ChangeNotifierProvider(create: (context) => CatService(favoriteCatImages)),
       ],
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
 
 class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+  const MyApp({Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
@@ -29,30 +41,38 @@ class MyApp extends StatelessWidget {
 
 class CatService extends ChangeNotifier {
   List<String> catImages = [];
-  List<String> favoriteCatImages = [];  // 좋아요 한 고양이 사진
+  List<String> favoriteCatImages;  // 좋아요 한 고양이 사진
 
   // CatService 생성자
-  CatService() {
+  CatService(this.favoriteCatImages) {
     getRandomCatImages();
+    getFavoriteCatImages();
   }
 
   // 랜덤 이미지 10개 가져오는 함수
   void getRandomCatImages() async {
-    String path = 'https://api.thecatapi.com/v1/images/search?limit=10&mime_types=gif';
-    var result = await Dio().get(path);
-    print(result.data);
+      String path = 'https://api.thecatapi.com/v1/images/search?limit=10&mime_types=gif';
+      var result = await Dio().get(path);
+      print(result.data);
 
-    // 필요한 데이터만 파싱(parsing)
-    for(int i=0; i<result.data.length; i++) {
-      var map = result.data[i];
-      print(map);
-      print(map['url']);
+      // 필요한 데이터만 파싱(parsing)
+      for(int i=0; i<result.data.length; i++) {
+        var map = result.data[i];
+        print(map);
+        print(map['url']);
 
-      // catImages에 url 추가
-      catImages.add(map['url']);
+        // catImages에 url 추가
+        catImages.add(map['url']);
     }
-    notifyListeners();
+
+    notifyListeners();   // 위젯 갱신
   }
+
+  // prefs에서 저장된 FavoriteCatImages 가져오는 함수
+  void getFavoriteCatImages() async {
+    favoriteCatImages = prefs.getStringList('favoriteCatImages') ?? [];
+  }
+
 
   // 좋아요 기능
   void toggleFavoriteCatImage(String catImage) {
@@ -61,10 +81,21 @@ class CatService extends ChangeNotifier {
     } else {
       favoriteCatImages.add(catImage);
     }
+
+    // shared preference에 저장
+    prefs.setStringList('favoriteCatImages', favoriteCatImages);
+
+    notifyListeners();
+  }
+
+  // 좋아요 clear() 기능
+  void clearFavoriteCatImage() {
+    favoriteCatImages.clear();
     notifyListeners();
   }
 
 }
+
 
 
 // 홈 화면
@@ -78,21 +109,27 @@ class HomePage extends StatelessWidget {
           return Scaffold(
             appBar: AppBar(
               backgroundColor: Colors.indigo,
-              actions: [
-                IconButton(
-                    onPressed: () {},
-                    icon: Icon(
-                      Icons.favorite,
-                      color: Colors.white,
-                    )
-                ),
-              ],
               title: Text(
                 '랜덤 고양이',
                 style: TextStyle(
                   color: Colors.white,
                 ),
               ),
+              actions: [
+                IconButton(
+                    onPressed: () {
+                      // favorite를 누르면 페이지 이동
+                      Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => FavoritePage(),),
+                      );
+                    },
+                    icon: Icon(
+                      Icons.favorite,
+                      color: Colors.white,
+                    )
+                ),
+              ],
             ),
 
             body: GridView.count(
@@ -146,3 +183,113 @@ class HomePage extends StatelessWidget {
   }
 
 }
+
+
+// // favorite 페이지
+class FavoritePage extends StatelessWidget {
+  const FavoritePage({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    // CatService 가져오기
+    final catService = Provider.of<CatService>(context);
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.indigo,
+        title: Text(
+          'Favorites',
+          style: TextStyle(
+            color: Colors.white,
+          ),
+        ),
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back),
+          onPressed: () {
+            Navigator.pop(context);
+          },
+          color: Colors.white,
+        ),
+        actions: [
+          IconButton(
+              onPressed: () {
+                // 경고창 표시
+                showDialog(
+                    context: context,
+                    builder: (BuildContext context) {
+                      return AlertDialog(
+                        content: Text('정말로 초기화하시겠습니까?'),
+                        actions: [
+                          TextButton(
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                              child: Text('취소'),
+                          ),
+                          TextButton(
+                              onPressed: () {
+                                // favoriteCatImages 초기화
+                                catService.clearFavoriteCatImage();
+                                Navigator.of(context).pop();   // 경고창 닫기
+                              },
+                              child: Text('확인'),
+                          ),
+                        ],
+                      );
+                    },
+                );
+                // favoriteCatImages 비우기
+                // catService.clearFavoriteCatImage();
+              },
+              icon: Icon(
+                Icons.delete,
+                color: Colors.white,
+              )
+          ),
+        ],
+      ),
+      
+      body: GridView.count(
+        crossAxisCount: 2,
+        mainAxisSpacing: 8,
+        crossAxisSpacing: 8,
+        padding: EdgeInsets.all(8),
+
+        // 그리드에 표시할 위젯 리스트(favortieCatImages.length 만큼)
+        children: List.generate(catService.favoriteCatImages.length, (index) {
+          String catImage = catService.favoriteCatImages[index];
+
+          return GestureDetector(
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: Image.network(
+                    catImage,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Positioned(
+                  bottom: 8,
+                  right: 8,
+                  child: Icon(
+                    Icons.favorite,
+                    color: catService.favoriteCatImages.contains(catImage) ?
+                    Colors.red : Colors.transparent,
+                  ),
+                ),
+              ],
+            ),
+            onTap: () {
+              // 선택 시 favorite 해제
+              catService.toggleFavoriteCatImage(catImage);
+            },
+          );
+
+        }),
+      ),
+
+    );
+  }
+
+}
+
