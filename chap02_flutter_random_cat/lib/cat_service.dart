@@ -1,19 +1,20 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/cupertino.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
-import 'main.dart';
 
-
-// ChangeNotifier 상태관리 패키지
+// ChangeNotifier : provider에서 제공하는 상태관리 패키지
 // 플러터의 native 패키지
 // Navigator나 GoRouter를 이용하여 페이지 이동 시 데이터를 실어 보낼 수 있다.
-
 class CatService extends ChangeNotifier {
+
+  late SharedPreferences prefs;
   List<String> catImages = [];
-  List<String> favoriteCatImages;  // 좋아요 한 고양이 사진
+  List<String> favoriteCatImages = [];  // 좋아요 한 고양이 사진
 
   // CatService 생성자
-  CatService(this.favoriteCatImages) {
+  CatService(SharedPreferences prefs) {
+    this.prefs = prefs;
     getRandomCatImages();
     getFavoriteCatImages();
   }
@@ -38,8 +39,8 @@ class CatService extends ChangeNotifier {
   }
 
   // prefs에서 저장된 FavoriteCatImages 가져오는 함수
-  void getFavoriteCatImages() async {
-    favoriteCatImages = await prefs.getStringList('favoriteCatImages') ?? [];
+  void getFavoriteCatImages()  {
+    favoriteCatImages = prefs.getStringList('favoriteCatImages') ?? [];
   }
 
 
@@ -60,6 +61,7 @@ class CatService extends ChangeNotifier {
   // 좋아요 clear() 기능
   void clearFavoriteCatImage() {
     favoriteCatImages.clear();
+
     notifyListeners();
   }
 
