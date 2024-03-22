@@ -5,14 +5,14 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'cat_service.dart';
 import 'home_page.dart';
 
-// SharedPreferences 전역변수 선언 : 초기 설정값 저장
+
 // late SharedPreferences prefs;
 void main() async {
 
   // main()에서 async 사용
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Shared Preference 인스턴스 생성
+  // Shared Preference 인스턴스 생성 (초기 설정값 저장)
   SharedPreferences prefs = await SharedPreferences.getInstance();
   
   // favoriteCatImages 가져오기
