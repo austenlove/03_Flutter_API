@@ -1,4 +1,6 @@
 import 'package:chap03_flutter_firebase/auth_service.dart';
+import 'package:chap03_flutter_firebase/to_do_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/cupertino.dart';
@@ -15,6 +17,7 @@ void main() async {
       MultiProvider(
         providers: [
           ChangeNotifierProvider(create: (context) => AuthService()),
+          ChangeNotifierProvider(create: (context) => ToDoService()),
         ],
         child: const MyApp(),
       ),
@@ -92,8 +95,8 @@ class _LoginPageState extends State<LoginPage> {
                   onPressed: () {
                     // 로그인 성공 시 HomePage로 이동
                     authService.signIn(
-                        email: emailController.text, 
-                        pw: pwController.text, 
+                        email: emailController.text,
+                        pw: pwController.text,
                         onSuccess: () {
                           // 로그인 성공
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -106,7 +109,7 @@ class _LoginPageState extends State<LoginPage> {
                               context,
                               MaterialPageRoute(builder: (context) => HomePage())
                           );
-                        }, 
+                        },
                         onError: (err) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -184,85 +187,125 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('To Do List'),
-        actions: [
-          TextButton(
-              onPressed: () {
-                // 로그아웃 버튼 클릭 시 액션
-                context.read<AuthService>().signOut();
-                // 로그인 페이지로 이동
-                Navigator.pushReplacement(
-                    context, 
-                    MaterialPageRoute(builder: (_) => LoginPage()),
-                );
-              },
-              child: Text(
-                '로그아웃',
-                style: TextStyle(color: Colors.black),
+    return Consumer<ToDoService>(builder: (context, toDoService, child) {
+      // 로그인한 회원정보를 context르르 통해 위젯트리 최상단에서 가져옴
+      final AuthService authService = context.read<AuthService>();
+
+      // 로그인 시에만 HomePage에 접근 가능하기 때문에 user는 null이 될 수 없음 -> !로 nullable을 지워준다.
+      User user = authService.currentUser()!;
+      print(user.uid);
+
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('To Do List'),
+            actions: [
+              TextButton(
+                  onPressed: () {
+                    // 로그아웃 버튼 클릭 시 액션
+                    context.read<AuthService>().signOut();
+                    // 로그인 페이지로 이동
+                    Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(builder: (_) => LoginPage()),
+                    );
+                  },
+                  child: Text(
+                    '로그아웃',
+                    style: TextStyle(color: Colors.black),
+                  ),
+              )
+            ],
+          ),
+
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(10.0),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: jobController,
+                        decoration: InputDecoration(hintText: '할 일을 입력하세요.'),
+                      ),
+                    ),
+
+                    ElevatedButton(
+                        onPressed: () {
+                          // add 버튼 선택 시 job 추가
+                          if(jobController.text.isNotEmpty) {
+                            toDoService.create(jobController.text, user.uid);
+                          }
+
+                        },
+                        child: Icon(Icons.add)
+                    ),
+                  ],
+                ),
               ),
-          )
-        ],
-      ),
 
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(10.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: jobController,
-                    decoration: InputDecoration(hintText: '할 일을 입력하세요.'),
-                  ),
+              Divider(
+                height: 1,
+              ),
+
+              Expanded(
+                /** FutureBuilder
+                 *  ToDoService 반환하는 값이 시간이 걸리는 Future여서 바로 화면에 보여줄 수 없을 때 사용
+                 *  데이터를 요청할 때 builder가 동작하고,
+                 *  데이터를 받아온 뒤 화면이 다시 그려지며 데이터를 출력함
+                 *  */
+                child: FutureBuilder<QuerySnapshot>(
+                  future: toDoService.read(user.uid),
+                  builder: (context, snapshot) {
+
+                    /** snapshot.data는 값을 가지고 오는데 시간이 걸림
+                     *  docs의 경우 데이터가 있는 경우에만 호출이 가능하기 때문에 data 뒤에
+                     *  ? nullable을 지정해줌 */
+                    // 반환되는 값
+                    final documents = snapshot.data?.docs ?? [];
+
+                    return ListView.builder(
+                      itemCount: documents.length,
+                      itemBuilder: (context, index) {
+                        final doc = documents[index];
+                        String job = doc.get('job');
+                        bool isDone = doc.get('isDone');
+                    
+                        return ListTile(
+                          title: Text(
+                            job,
+                            style: TextStyle(
+                              fontSize: 20,
+                              color: isDone ? Colors.grey : Colors.black,
+                              decoration: isDone
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
+                          ),
+                          trailing: IconButton(
+                            onPressed: () {
+                              // 삭제 버튼 클릭 시 액션
+                              toDoService.delete(doc.id);
+                            },
+                            icon: Icon(
+                              CupertinoIcons.delete,
+                            ),
+                          ),
+                          onTap: () {
+                            // 아이템을 클릭했을 때 isDone 상태 변경
+                            toDoService.update(doc.id, !isDone);
+                          },
+                        );
+                      }
+                    );
+                  }
                 ),
-
-                ElevatedButton(
-                    onPressed: () {},
-                    child: Icon(Icons.add)
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
 
-          Divider(
-            height: 1,
-          ),
-
-          Expanded(
-            child: ListView.builder(
-              itemCount: 10,
-              itemBuilder: (context, index) {
-                String job = "$index";
-                bool isDone = false;
-
-                return ListTile(
-                  title: Text(
-                    job,
-                    style: TextStyle(
-                      fontSize: 20,
-                      color: isDone ? Colors.grey : Colors.black,
-                      decoration: isDone ? TextDecoration.lineThrough : TextDecoration.none,
-                    ),
-                  ),
-                  trailing: IconButton(
-                    onPressed: () {
-                      // 삭제 버튼 클릭 시 액션
-                    },
-                    icon: Icon(
-                      CupertinoIcons.delete,
-                    ),
-                  ),
-                  onTap: () {},
-                );
-              }
-            ),
-          ),
-        ],
-      ),
-
+        );
+      }
     );
   }
 }

@@ -6,7 +6,7 @@ class AuthService extends ChangeNotifier {
 
   // 로그인한 유저 정보 가져오기
   User? currentUser() {
-    // 로그인되지 않으면 null qksghks
+    // 로그인되지 않으면 null 반환
     return FirebaseAuth.instance.currentUser;
   }
 
